@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Camera, Trophy, X, ChevronRight, Sparkles, Hash } from 'lucide-react';
+import {
+  Camera,
+  Trophy,
+  X,
+  ChevronRight,
+  Sparkles,
+  Hash,
+  HelpCircle,
+} from 'lucide-react';
 import {
   supabase,
   type Mission,
@@ -14,6 +22,7 @@ type Props = {
 export default function HomeScreen({ onNavigate }: Props) {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
   const playerNumber = getStoredPlayerNumber();
 
   useEffect(() => {
@@ -35,23 +44,35 @@ export default function HomeScreen({ onNavigate }: Props) {
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-orange-500/20">
             <Sparkles className="h-5 w-5 text-slate-900" />
           </div>
-          <span className="text-lg font-bold tracking-tight">PhotoQuest</span>
+          <span className="text-lg font-bold tracking-tight">ゲーム名</span>
         </div>
-        <button
-          onClick={() => onNavigate('home')}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 active:scale-95"
-          aria-label="閉じる"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border-2 border-white/20 text-white/80 transition hover:border-amber-400 hover:text-amber-400 active:scale-95"
+            aria-label="遊び方"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => onNavigate('home')}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 active:scale-95"
+            aria-label="閉じる"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
       {/* Hero */}
       <section className="px-5 pt-4 pb-6 text-center">
-        <h1 className="bg-gradient-to-r from-amber-300 via-orange-300 to-rose-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
-          写真で競い合おう
+        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+          ゲーム名
         </h1>
-        <p className="mt-2 text-sm text-slate-300">
+        <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-relaxed text-slate-300">
+          研究目的に使います。写真を投稿するには、Googleアカウントが必要になります。参加は任意です。
+        </p>
+        <p className="mt-3 text-sm text-slate-300">
           ミッションをクリアしてポイントを稼ぎ、ランキング上位を目指そう
         </p>
       </section>
@@ -160,6 +181,57 @@ export default function HomeScreen({ onNavigate }: Props) {
           </div>
         )}
       </section>
+
+      {/* Help popup */}
+      {showHelp && <HelpPopup onClose={() => setShowHelp(false)} />}
+    </div>
+  );
+}
+
+function HelpPopup({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white">遊び方</h2>
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 active:scale-95"
+            aria-label="閉じる"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <ol className="space-y-3 text-sm text-slate-300">
+          {[
+            '好きなミッションを選ぶ',
+            '「写真を投稿する」を押して、投稿フォームから写真を送る（Googleアカウントが必要）',
+            'アプリに戻って「完了報告してポイント獲得」を押す',
+            '初めての人にはプレイヤー番号が発行されるので、メモしておく',
+            '1日1回のミッションと、何度でもできるミッションがある',
+          ].map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-xs font-bold text-amber-300">
+                {i + 1}
+              </span>
+              <span className="leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3">
+          <p className="text-xs leading-relaxed text-rose-200">
+            ※顔・車のナンバー・住所が分かるものは写さないでください
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
