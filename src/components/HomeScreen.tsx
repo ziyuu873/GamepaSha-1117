@@ -44,7 +44,7 @@ export default function HomeScreen({ onNavigate }: Props) {
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-orange-500/20">
             <Sparkles className="h-5 w-5 text-slate-900" />
           </div>
-          <span className="text-lg font-bold tracking-tight">ゲーム名</span>
+          <span className="text-lg font-bold tracking-tight">撮ってパシャ！</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -67,10 +67,10 @@ export default function HomeScreen({ onNavigate }: Props) {
       {/* Hero */}
       <section className="px-5 pt-4 pb-6 text-center">
         <h1 className="text-3xl font-extrabold tracking-tight text-white">
-          ゲーム名
+          撮ってパシャ！
         </h1>
         <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-relaxed text-slate-300">
-          研究目的に使います。写真を投稿するには、Googleアカウントが必要になります。参加は任意です。
+          研究目的に使います。写真を投稿するには、Googleアカウントが必要になります。
         </p>
         <p className="mt-3 text-sm text-slate-300">
           ミッションをクリアしてポイントを稼ぎ、ランキング上位を目指そう
