@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X,
   Camera,
@@ -19,8 +19,10 @@ import {
   storePlayerNumber,
   type SubmitResult,
 } from '@/lib/supabase';
-import { TITLES, getTitleForScore } from '@/lib/titles';
+import { getTitleForScore } from '@/lib/titles';
 import type { Screen } from '@/App';
+
+const FORM_COOLDOWN_SECONDS = 30;
 
 type Props = {
   mission: Mission;
@@ -34,14 +36,29 @@ export default function MissionScreen({ mission, onNavigate }: Props) {
   const [playerNumberInput, setPlayerNumberInput] = useState<string>('');
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+  const formOpenedAtRef = useRef<number | null>(null);
 
   const storedNumber = getStoredPlayerNumber();
   const unlimited = mission.max_per_day === null;
   const limitLabel = unlimited ? '何回でも投稿OK' : '1日1回まで';
+  const hasFormUrl = !!mission.form_url;
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const openForm = () => {
     if (mission.form_url) {
       window.open(mission.form_url, '_blank', 'noopener,noreferrer');
+      if (formOpenedAtRef.current === null) {
+        formOpenedAtRef.current = Date.now();
+        setCooldown(FORM_COOLDOWN_SECONDS);
+      }
     }
     setPhase('form');
   };
@@ -159,7 +176,8 @@ export default function MissionScreen({ mission, onNavigate }: Props) {
             setPlayerNumberInput={setPlayerNumberInput}
             onSubmit={handleSubmit}
             onOpenForm={openForm}
-            hasFormUrl={!!mission.form_url}
+            hasFormUrl={hasFormUrl}
+            cooldown={cooldown}
           />
         )}
 
@@ -248,6 +266,7 @@ function FormPhase({
   onSubmit,
   onOpenForm,
   hasFormUrl,
+  cooldown,
 }: {
   mission: Mission;
   storedNumber: number | null;
@@ -256,7 +275,10 @@ function FormPhase({
   onSubmit: () => void;
   onOpenForm: () => void;
   hasFormUrl: boolean;
+  cooldown: number;
 }) {
+  const canSubmit = cooldown <= 0;
+
   return (
     <div className="mt-6 space-y-4">
       {hasFormUrl && (
@@ -302,10 +324,17 @@ function FormPhase({
 
       <button
         onClick={onSubmit}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-400 to-green-500 py-4 font-bold text-slate-900 shadow-lg shadow-emerald-500/20 transition hover:brightness-110 active:scale-[0.98]"
+        disabled={!canSubmit}
+        className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-bold shadow-lg transition active:scale-[0.98] ${
+          canSubmit
+            ? 'bg-gradient-to-r from-emerald-400 to-green-500 text-slate-900 shadow-emerald-500/20 hover:brightness-110'
+            : 'cursor-not-allowed bg-white/10 text-slate-400 shadow-none'
+        }`}
       >
         <CheckCircle2 className="h-5 w-5" />
-        完了報告してポイント獲得
+        {canSubmit
+          ? '完了報告してポイント獲得'
+          : `あと${cooldown}秒`}
       </button>
     </div>
   );

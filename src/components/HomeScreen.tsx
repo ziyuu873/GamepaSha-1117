@@ -105,10 +105,10 @@ export default function HomeScreen({ onNavigate }: Props) {
               </div>
             </div>
             <button
-              onClick={() => onNavigate('ranking')}
+              onClick={() => setShowTitles(true)}
               className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20 active:scale-95"
             >
-              順位を見る
+              称号を見る
             </button>
           </div>
         </section>
