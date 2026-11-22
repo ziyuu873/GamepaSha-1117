@@ -19,6 +19,7 @@ import {
   storePlayerNumber,
   type SubmitResult,
 } from '@/lib/supabase';
+import { TITLES, getTitleForScore } from '@/lib/titles';
 import type { Screen } from '@/App';
 
 type Props = {
@@ -66,7 +67,7 @@ export default function MissionScreen({ mission, onNavigate }: Props) {
         if (msg.includes('プレイヤー番号')) {
           throw new Error('入力されたプレイヤー番号が見つかりませんでした');
         }
-        throw new Error(msg || '投稿に失敗しました');
+        throw new Error('うまく記録できませんでした。しばらくしてからもう一度お試しください');
       }
 
       if (!data || (Array.isArray(data) && data.length === 0)) {
@@ -326,6 +327,11 @@ function DonePhase({
   result: SubmitResult;
   onNavigate: (screen: Screen) => void;
 }) {
+  const prevScore = result.total_score - result.awarded_points;
+  const prevTitle = getTitleForScore(prevScore);
+  const newTitle = getTitleForScore(result.total_score);
+  const titleUnlocked = prevTitle.name !== newTitle.name;
+
   return (
     <div className="mt-6 space-y-4">
       <div className="rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-orange-500/10 p-6 text-center backdrop-blur">
@@ -339,6 +345,15 @@ function DonePhase({
           <Trophy className="h-5 w-5" />
           +{result.awarded_points} pt
         </div>
+
+        {titleUnlocked && (
+          <div className="mt-4 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-400/20 to-orange-500/20 p-4">
+            <p className="text-sm font-extrabold text-amber-300">称号を獲得！</p>
+            <p className="mt-1 text-lg font-extrabold text-white">
+              {newTitle.name}
+            </p>
+          </div>
+        )}
 
         {result.is_new_player ? (
           <div className="mt-5 rounded-2xl bg-white/5 p-4">
@@ -364,6 +379,10 @@ function DonePhase({
           <span className="font-bold text-white">
             {result.total_score.toLocaleString()} pt
           </span>
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-2 text-sm">
+          <span className="text-slate-300">現在の称号</span>
+          <span className="font-bold text-amber-300">{newTitle.name}</span>
         </div>
       </div>
 

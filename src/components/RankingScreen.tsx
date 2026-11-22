@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Crown, Search, Hash } from 'lucide-react';
+import { Trophy, Medal, Crown, Search, Award } from 'lucide-react';
 import { supabase, type Player } from '@/lib/supabase';
+import { getTitleForScore } from '@/lib/titles';
 import type { Screen } from '@/App';
 
 type Props = {
@@ -134,6 +135,10 @@ export default function RankingScreen({ onNavigate }: Props) {
                   <p className="text-lg font-extrabold text-sky-300">
                     {lookupResult.player.score.toLocaleString()} pt
                   </p>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-300">
+                    <Award className="h-3 w-3" />
+                    {getTitleForScore(lookupResult.player.score).name}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-300">順位</p>
@@ -192,9 +197,15 @@ export default function RankingScreen({ onNavigate }: Props) {
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-sm font-bold text-white">
                       {p.player_number}
                     </div>
-                    <span className="flex-1 truncate font-medium text-white">
-                      #{p.player_number}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="block truncate font-medium text-white">
+                        #{p.player_number}
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-amber-300">
+                        <Award className="h-3 w-3" />
+                        {getTitleForScore(p.score).name}
+                      </span>
+                    </div>
                     <span className="text-sm font-bold text-amber-300">
                       {p.score.toLocaleString()} pt
                     </span>
@@ -257,8 +268,12 @@ function PodiumCard({
       <p className="mb-1 text-sm font-bold text-white">
         #{player.player_number}
       </p>
-      <p className="mb-2 text-xs text-amber-300">
+      <p className="mb-1 text-xs text-amber-300">
         {player.score.toLocaleString()} pt
+      </p>
+      <p className="mb-2 flex items-center justify-center gap-1 text-xs text-slate-300">
+        <Award className="h-3 w-3" />
+        {getTitleForScore(player.score).name}
       </p>
       <div
         className={`flex w-full ${height} items-start justify-center rounded-t-lg bg-gradient-to-t ${colors} pt-2`}

@@ -7,12 +7,16 @@ import {
   Sparkles,
   Hash,
   HelpCircle,
+  Award,
+  Search,
 } from 'lucide-react';
 import {
   supabase,
   type Mission,
   getStoredPlayerNumber,
+  type Player,
 } from '@/lib/supabase';
+import { TITLES, getTitleForScore } from '@/lib/titles';
 import type { Screen } from '@/App';
 
 type Props = {
@@ -23,6 +27,7 @@ export default function HomeScreen({ onNavigate }: Props) {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
+  const [showTitles, setShowTitles] = useState(false);
   const playerNumber = getStoredPlayerNumber();
 
   useEffect(() => {
@@ -53,6 +58,13 @@ export default function HomeScreen({ onNavigate }: Props) {
             aria-label="遊び方"
           >
             <HelpCircle className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setShowTitles(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border-2 border-white/20 text-white/80 transition hover:border-amber-400 hover:text-amber-400 active:scale-95"
+            aria-label="称号一覧"
+          >
+            <Award className="h-5 w-5" />
           </button>
           <button
             onClick={() => onNavigate('home')}
@@ -184,6 +196,14 @@ export default function HomeScreen({ onNavigate }: Props) {
 
       {/* Help popup */}
       {showHelp && <HelpPopup onClose={() => setShowHelp(false)} />}
+
+      {/* Titles popup */}
+      {showTitles && (
+        <TitlesPopup
+          onClose={() => setShowTitles(false)}
+          storedNumber={playerNumber}
+        />
+      )}
     </div>
   );
 }
@@ -230,6 +250,191 @@ function HelpPopup({ onClose }: { onClose: () => void }) {
           <p className="text-xs leading-relaxed text-rose-200">
             ※顔・車のナンバー・住所が分かるものは写さないでください
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TitlesPopup({
+  onClose,
+  storedNumber,
+}: {
+  onClose: () => void;
+  storedNumber: number | null;
+}) {
+  const [inputNumber, setInputNumber] = useState('');
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  // Auto-load if stored number exists
+  useEffect(() => {
+    if (storedNumber !== null) {
+      (async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('players')
+          .select('*')
+          .eq('player_number', storedNumber)
+          .maybeSingle();
+        setLoading(false);
+        if (!error && data) setPlayer(data as Player);
+      })();
+    }
+  }, [storedNumber]);
+
+  const activeNumber = storedNumber ?? player?.player_number ?? null;
+  const score = player?.score ?? 0;
+  const earnedCount = TITLES.filter((t) => score >= t.threshold).length;
+
+  const lookup = async () => {
+    const n = parseInt(inputNumber.trim(), 10);
+    if (Number.isNaN(n)) {
+      setNotFound(true);
+      return;
+    }
+    setLoading(true);
+    setNotFound(false);
+    const { data, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('player_number', n)
+      .maybeSingle();
+    setLoading(false);
+    if (error || !data) {
+      setPlayer(null);
+      setNotFound(true);
+      return;
+    }
+    setPlayer(data as Player);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Award className="h-5 w-5 text-amber-400" />
+            <h2 className="text-lg font-bold text-white">称号一覧</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 active:scale-95"
+            aria-label="閉じる"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Number input or display */}
+        {activeNumber !== null ? (
+          <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+            <p className="text-xs text-slate-300">プレイヤー番号</p>
+            <p className="text-2xl font-extrabold text-sky-300">
+              #{activeNumber}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              現在の称号:
+              <span className="ml-1 font-bold text-amber-300">
+                {getTitleForScore(score).name}
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              合計 {score.toLocaleString()} pt
+            </p>
+          </div>
+        ) : (
+          <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Search className="h-4 w-4 text-sky-400" />
+              <p className="text-sm font-bold text-white">
+                プレイヤー番号を入力
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                value={inputNumber}
+                onChange={(e) => setInputNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') lookup();
+                }}
+                placeholder="例: 1"
+                className="flex-1 rounded-xl border border-white/10 bg-slate-800 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+              <button
+                onClick={lookup}
+                className="rounded-xl bg-gradient-to-r from-sky-400 to-blue-500 px-4 py-2.5 font-bold text-white active:scale-95"
+              >
+                確認
+              </button>
+            </div>
+            {notFound && (
+              <p className="mt-2 text-xs text-rose-300">
+                その番号のプレイヤーは見つかりませんでした
+              </p>
+            )}
+            {loading && <p className="mt-2 text-xs text-slate-400">検索中…</p>}
+          </div>
+        )}
+
+        {/* Earned count */}
+        <p className="mb-3 text-sm font-bold text-white">
+          獲得数 {earnedCount} / {TITLES.length}
+        </p>
+
+        {/* Titles list */}
+        <div className="space-y-2">
+          {TITLES.map((t) => {
+            const earned = score >= t.threshold;
+            const diff = t.threshold - score;
+            return (
+              <div
+                key={t.name}
+                className={`flex items-center justify-between rounded-xl border p-3 ${
+                  earned
+                    ? 'border-amber-400/30 bg-amber-400/10'
+                    : 'border-white/10 bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                      earned
+                        ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-slate-900'
+                        : 'bg-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <Award className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p
+                      className={`text-sm font-bold ${
+                        earned ? 'text-white' : 'text-slate-400'
+                      }`}
+                    >
+                      {earned ? t.name : '？？？'}
+                    </p>
+                    <p
+                      className={`text-xs ${
+                        earned ? 'text-amber-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {earned ? `${t.threshold} pt` : `あと ${diff} ptで獲得`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
