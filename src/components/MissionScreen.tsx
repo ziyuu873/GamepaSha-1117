@@ -11,6 +11,7 @@ import {
   Loader2,
   Repeat,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import type { Mission } from '@/lib/supabase';
 import {
@@ -19,7 +20,7 @@ import {
   storePlayerNumber,
   type SubmitResult,
 } from '@/lib/supabase';
-import { getTitleForScore } from '@/lib/titles';
+import { TITLES, getTitleForScore, getNextTitle, type Title } from '@/lib/titles';
 import type { Screen } from '@/App';
 
 const FORM_COOLDOWN_SECONDS = 30;
@@ -357,9 +358,8 @@ function DonePhase({
   onNavigate: (screen: Screen) => void;
 }) {
   const prevScore = result.total_score - result.awarded_points;
-  const prevTitle = getTitleForScore(prevScore);
-  const newTitle = getTitleForScore(result.total_score);
-  const titleUnlocked = prevTitle.name !== newTitle.name;
+  const newScore = result.total_score;
+  const newTitle = getTitleForScore(newScore);
 
   return (
     <div className="mt-6 space-y-4">
@@ -374,15 +374,6 @@ function DonePhase({
           <Trophy className="h-5 w-5" />
           +{result.awarded_points} pt
         </div>
-
-        {titleUnlocked && (
-          <div className="mt-4 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-400/20 to-orange-500/20 p-4">
-            <p className="text-sm font-extrabold text-amber-300">称号を獲得！</p>
-            <p className="mt-1 text-lg font-extrabold text-white">
-              {newTitle.name}
-            </p>
-          </div>
-        )}
 
         {result.is_new_player ? (
           <div className="mt-5 rounded-2xl bg-white/5 p-4">
@@ -406,13 +397,15 @@ function DonePhase({
         <div className="mt-4 flex items-center justify-center gap-4 text-sm">
           <span className="text-slate-300">合計スコア</span>
           <span className="font-bold text-white">
-            {result.total_score.toLocaleString()} pt
+            {newScore.toLocaleString()} pt
           </span>
         </div>
         <div className="mt-2 flex items-center justify-center gap-2 text-sm">
           <span className="text-slate-300">現在の称号</span>
           <span className="font-bold text-amber-300">{newTitle.name}</span>
         </div>
+
+        <TitleGauge prevScore={prevScore} newScore={newScore} />
       </div>
 
       <button
@@ -428,6 +421,126 @@ function DonePhase({
       >
         ホームに戻る
       </button>
+    </div>
+  );
+}
+
+function TitleGauge({
+  prevScore,
+  newScore,
+}: {
+  prevScore: number;
+  newScore: number;
+}) {
+  const [animatedPct, setAnimatedPct] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [phase, setPhase] = useState<'animating' | 'settled'>('animating');
+
+  const prevTitle = getTitleForScore(prevScore);
+  const newTitle = getTitleForScore(newScore);
+  const titleUnlocked = prevTitle.name !== newTitle.name;
+  const isMaxTitle = newTitle.name === TITLES[TITLES.length - 1].name;
+
+  const nextAfterNew = getNextTitle(newScore);
+  const lowerBound = newTitle.threshold;
+  const upperBound = nextAfterNew ? nextAfterNew.threshold : newTitle.threshold;
+  const hasRange = upperBound > lowerBound;
+  const currentPct =
+    hasRange && nextAfterNew
+      ? Math.min(100, Math.max(0, ((newScore - lowerBound) / (upperBound - lowerBound)) * 100))
+      : 100;
+
+  useEffect(() => {
+    const prevNext = getNextTitle(prevScore);
+    const prevLower = prevTitle.threshold;
+    const prevUpper = prevNext ? prevNext.threshold : prevTitle.threshold;
+    const prevHasRange = prevUpper > prevLower && !!prevNext;
+    const startPct = prevHasRange
+      ? Math.min(100, Math.max(0, ((prevScore - prevLower) / (prevUpper - prevLower)) * 100))
+      : 100;
+
+    setAnimatedPct(startPct);
+    setShowCelebration(false);
+
+    const targetDelay = titleUnlocked ? 1500 : 100;
+    const settleDelay = titleUnlocked ? 2300 : 1600;
+
+    const growTimer = setTimeout(() => {
+      setAnimatedPct(100);
+    }, targetDelay);
+
+    if (titleUnlocked) {
+      const celebTimer = setTimeout(() => {
+        setShowCelebration(true);
+      }, settleDelay);
+      const settleTimer = setTimeout(() => {
+        setPhase('settled');
+        setAnimatedPct(currentPct);
+      }, settleDelay + 1000);
+      return () => {
+        clearTimeout(growTimer);
+        clearTimeout(celebTimer);
+        clearTimeout(settleTimer);
+      };
+    }
+
+    const finalTimer = setTimeout(() => {
+      setAnimatedPct(currentPct);
+    }, targetDelay + 100);
+    const settleTimer = setTimeout(() => setPhase('settled'), settleDelay);
+    return () => {
+      clearTimeout(growTimer);
+      clearTimeout(finalTimer);
+      clearTimeout(settleTimer);
+    };
+  }, [prevScore, newScore, prevTitle.threshold, titleUnlocked, currentPct]);
+
+  if (isMaxTitle) {
+    return (
+      <div className="mt-5">
+        <div className="rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-400/20 to-orange-500/20 p-4">
+          <p className="flex items-center justify-center gap-2 text-base font-extrabold text-amber-300">
+            <Sparkles className="h-5 w-5" />
+            最高の称号に到達！
+          </p>
+          <p className="mt-1 text-sm text-amber-200">{newTitle.name}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayPct = phase === 'settled' ? currentPct : animatedPct;
+  const nextLabel = nextAfterNew
+    ? `次の称号: ${nextAfterNew.name}(あと${upperBound - newScore}pt)`
+    : '';
+
+  return (
+    <div className="mt-5">
+      {titleUnlocked && showCelebration && (
+        <div className="mb-3 animate-title-pop">
+          <div className="rounded-2xl border border-amber-400/50 bg-gradient-to-r from-amber-400/25 to-orange-500/25 p-4 animate-title-glow">
+            <p className="text-sm font-extrabold text-amber-300">称号を獲得！</p>
+            <p className="mt-1 text-2xl font-extrabold text-white">
+              {newTitle.name}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {nextLabel && (
+        <p className="mb-1.5 text-xs text-slate-300">{nextLabel}</p>
+      )}
+
+      <div className="h-3 w-full overflow-hidden rounded-full bg-slate-700">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-[1500ms] ease-out"
+          style={{ width: `${displayPct}%` }}
+        />
+      </div>
+
+      <p className="mt-1.5 text-xs text-slate-400">
+        現在 {newScore.toLocaleString()} pt / {upperBound.toLocaleString()} pt
+      </p>
     </div>
   );
 }
