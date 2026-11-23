@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Camera,
@@ -20,10 +20,10 @@ import {
   storePlayerNumber,
   type SubmitResult,
 } from '@/lib/supabase';
-import { TITLES, getTitleForScore, getNextTitle, type Title } from '@/lib/titles';
+import { TITLES, getTitleForScore, getNextTitle } from '@/lib/titles';
 import type { Screen } from '@/App';
 
-const FORM_COOLDOWN_SECONDS = 30;
+const FORM_COOLDOWN_SECONDS = 20;
 
 type Props = {
   mission: Mission;
@@ -425,6 +425,67 @@ function DonePhase({
   );
 }
 
+function TitleGauge({/* ---------- Title gauge ---------- */
+
+type GaugeSegment = {
+  fromPct: number;
+  toPct: number;
+  fromScore: number;
+  toScore: number;
+  upper: number;
+  unlockName: string | null;
+};
+
+const clampPct = (v: number) => Math.min(100, Math.max(0, v));
+
+function titleIndexOf(score: number): number {
+  const t = getTitleForScore(score);
+  const i = TITLES.findIndex((x) => x.name === t.name);
+  return i < 0 ? 0 : i;
+}
+
+function pctInTitle(score: number, idx: number): number {
+  const cur = TITLES[idx];
+  const nxt = TITLES[idx + 1];
+  if (!nxt) return 100;
+  const range = nxt.threshold - cur.threshold;
+  if (range <= 0) return 100;
+  return clampPct(((score - cur.threshold) / range) * 100);
+}
+
+function buildSegments(prevScore: number, newScore: number): GaugeSegment[] {
+  const segs: GaugeSegment[] = [];
+  let idx = titleIndexOf(prevScore);
+  const endIdx = titleIndexOf(newScore);
+  let s = prevScore;
+
+  while (idx < endIdx) {
+    const nxt = TITLES[idx + 1];
+    segs.push({
+      fromPct: pctInTitle(s, idx),
+      toPct: 100,
+      fromScore: s,
+      toScore: nxt.threshold,
+      upper: nxt.threshold,
+      unlockName: nxt.name,
+    });
+    s = nxt.threshold;
+    idx += 1;
+  }
+
+  const nextTitle = TITLES[idx + 1];
+  segs.push({
+    fromPct: pctInTitle(s, idx),
+    toPct: pctInTitle(newScore, idx),
+    fromScore: s,
+    toScore: newScore,
+    upper: nextTitle ? nextTitle.threshold : TITLES[idx].threshold,
+    unlockName: null,
+  });
+
+  return segs;
+}
+
 function TitleGauge({
   prevScore,
   newScore,
@@ -432,68 +493,83 @@ function TitleGauge({
   prevScore: number;
   newScore: number;
 }) {
-  const [animatedPct, setAnimatedPct] = useState(0);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [phase, setPhase] = useState<'animating' | 'settled'>('animating');
+  const segments = useMemo(
+    () => buildSegments(prevScore, newScore),
+    [prevScore, newScore]
+  );
 
-  const prevTitle = getTitleForScore(prevScore);
+  const [pct, setPct] = useState<number>(segments[0].fromPct);
+  const [shownScore, setShownScore] = useState<number>(prevScore);
+  const [upper, setUpper] = useState<number>(segments[0].upper);
+  const [celebrationName, setCelebrationName] = useState<string | null>(null);
+  const [settled, setSettled] = useState(false);
+
   const newTitle = getTitleForScore(newScore);
-  const titleUnlocked = prevTitle.name !== newTitle.name;
   const isMaxTitle = newTitle.name === TITLES[TITLES.length - 1].name;
-
   const nextAfterNew = getNextTitle(newScore);
-  const lowerBound = newTitle.threshold;
-  const upperBound = nextAfterNew ? nextAfterNew.threshold : newTitle.threshold;
-  const hasRange = upperBound > lowerBound;
-  const currentPct =
-    hasRange && nextAfterNew
-      ? Math.min(100, Math.max(0, ((newScore - lowerBound) / (upperBound - lowerBound)) * 100))
-      : 100;
 
   useEffect(() => {
-    const prevNext = getNextTitle(prevScore);
-    const prevLower = prevTitle.threshold;
-    const prevUpper = prevNext ? prevNext.threshold : prevTitle.threshold;
-    const prevHasRange = prevUpper > prevLower && !!prevNext;
-    const startPct = prevHasRange
-      ? Math.min(100, Math.max(0, ((prevScore - prevLower) / (prevUpper - prevLower)) * 100))
-      : 100;
+    if (isMaxTitle) return;
 
-    setAnimatedPct(startPct);
-    setShowCelebration(false);
+    let cancelled = false;
+    let raf = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const targetDelay = titleUnlocked ? 1500 : 100;
-    const settleDelay = titleUnlocked ? 2300 : 1600;
+    setPct(segments[0].fromPct);
+    setShownScore(prevScore);
+    setUpper(segments[0].upper);
+    setCelebrationName(null);
+    setSettled(false);
 
-    const growTimer = setTimeout(() => {
-      setAnimatedPct(100);
-    }, targetDelay);
+    const runSegment = (i: number) => {
+      const seg = segments[i];
+      setUpper(seg.upper);
+      const span = Math.max(0, seg.toPct - seg.fromPct);
+      const duration = Math.max(500, 1500 * (span / 100));
+      const start = performance.now();
 
-    if (titleUnlocked) {
-      const celebTimer = setTimeout(() => {
-        setShowCelebration(true);
-      }, settleDelay);
-      const settleTimer = setTimeout(() => {
-        setPhase('settled');
-        setAnimatedPct(currentPct);
-      }, settleDelay + 1000);
-      return () => {
-        clearTimeout(growTimer);
-        clearTimeout(celebTimer);
-        clearTimeout(settleTimer);
+      const step = (now: number) => {
+        if (cancelled) return;
+        const p = Math.min(1, (now - start) / duration);
+        const e = 1 - Math.pow(1 - p, 3);
+        setPct(seg.fromPct + (seg.toPct - seg.fromPct) * e);
+        setShownScore(
+          Math.round(seg.fromScore + (seg.toScore - seg.fromScore) * e)
+        );
+        if (p < 1) {
+          raf = requestAnimationFrame(step);
+        } else {
+          onSegmentEnd(i);
+        }
       };
-    }
-
-    const finalTimer = setTimeout(() => {
-      setAnimatedPct(currentPct);
-    }, targetDelay + 100);
-    const settleTimer = setTimeout(() => setPhase('settled'), settleDelay);
-    return () => {
-      clearTimeout(growTimer);
-      clearTimeout(finalTimer);
-      clearTimeout(settleTimer);
+      raf = requestAnimationFrame(step);
     };
-  }, [prevScore, newScore, prevTitle.threshold, titleUnlocked, currentPct]);
+
+    const onSegmentEnd = (i: number) => {
+      const seg = segments[i];
+      setPct(seg.toPct);
+      setShownScore(seg.toScore);
+
+      if (seg.unlockName) {
+        setCelebrationName(seg.unlockName);
+        timer = setTimeout(() => {
+          if (cancelled) return;
+          setPct(0);
+          runSegment(i + 1);
+        }, 1000);
+      } else {
+        setSettled(true);
+      }
+    };
+
+    runSegment(0);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
+    };
+  }, [segments, prevScore, isMaxTitle]);
 
   if (isMaxTitle) {
     return (
@@ -509,37 +585,36 @@ function TitleGauge({
     );
   }
 
-  const displayPct = phase === 'settled' ? currentPct : animatedPct;
   const nextLabel = nextAfterNew
-    ? `次の称号: ${nextAfterNew.name}(あと${upperBound - newScore}pt)`
+    ? `次の称号: ${nextAfterNew.name}(あと${nextAfterNew.threshold - newScore}pt)`
     : '';
 
   return (
     <div className="mt-5">
-      {titleUnlocked && showCelebration && (
+      {celebrationName && (
         <div className="mb-3 animate-title-pop">
           <div className="rounded-2xl border border-amber-400/50 bg-gradient-to-r from-amber-400/25 to-orange-500/25 p-4 animate-title-glow">
             <p className="text-sm font-extrabold text-amber-300">称号を獲得！</p>
             <p className="mt-1 text-2xl font-extrabold text-white">
-              {newTitle.name}
+              {celebrationName}
             </p>
           </div>
         </div>
       )}
 
-      {nextLabel && (
-        <p className="mb-1.5 text-xs text-slate-300">{nextLabel}</p>
-      )}
+      <p className="mb-1.5 min-h-[1rem] text-xs text-slate-300">
+        {settled ? nextLabel : '\u00A0'}
+      </p>
 
       <div className="h-3 w-full overflow-hidden rounded-full bg-slate-700">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-[1500ms] ease-out"
-          style={{ width: `${displayPct}%` }}
+          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500"
+          style={{ width: `${pct}%` }}
         />
       </div>
 
       <p className="mt-1.5 text-xs text-slate-400">
-        現在 {newScore.toLocaleString()} pt / {upperBound.toLocaleString()} pt
+        現在 {shownScore.toLocaleString()} pt / {upper.toLocaleString()} pt
       </p>
     </div>
   );
