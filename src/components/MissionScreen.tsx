@@ -425,7 +425,7 @@ function DonePhase({
   );
 }
 
-function TitleGauge({/* ---------- Title gauge ---------- */
+/* ---------- Title gauge ---------- */
 
 type GaugeSegment = {
   fromPct: number;
